@@ -49,8 +49,8 @@ cmake_ninja_workdir = /home/basiltkachenko/CLionProjects/course_project_v2/cmake
 
 build cmake_object_order_depends_target_course_project_v2: phony || CMakeFiles/course_project_v2.dir
 
-build CMakeFiles/course_project_v2.dir/main.c.o: C_COMPILER__course_project_v2_Debug /home/basiltkachenko/CLionProjects/course_project_v2/main.c || cmake_object_order_depends_target_course_project_v2
-  DEP_FILE = CMakeFiles/course_project_v2.dir/main.c.o.d
+build CMakeFiles/course_project_v2.dir/server.c.o: C_COMPILER__course_project_v2_Debug /home/basiltkachenko/CLionProjects/course_project_v2/server.c || cmake_object_order_depends_target_course_project_v2
+  DEP_FILE = CMakeFiles/course_project_v2.dir/server.c.o.d
   FLAGS = -g -std=gnu99
   OBJECT_DIR = CMakeFiles/course_project_v2.dir
   OBJECT_FILE_DIR = CMakeFiles/course_project_v2.dir
@@ -69,7 +69,7 @@ build CMakeFiles/course_project_v2.dir/client.c.o: C_COMPILER__course_project_v2
 #############################################
 # Link the executable course_project_v2
 
-build course_project_v2: C_EXECUTABLE_LINKER__course_project_v2_Debug CMakeFiles/course_project_v2.dir/main.c.o CMakeFiles/course_project_v2.dir/client.c.o
+build course_project_v2: C_EXECUTABLE_LINKER__course_project_v2_Debug CMakeFiles/course_project_v2.dir/server.c.o CMakeFiles/course_project_v2.dir/client.c.o
   FLAGS = -g
   OBJECT_DIR = CMakeFiles/course_project_v2.dir
   POST_BUILD = :
