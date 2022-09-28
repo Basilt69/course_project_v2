@@ -75,6 +75,17 @@ int check(int exp, const char *msg){
     return exp;
 }
 
+void * thread_function(void *arg){
+    while(true){
+        int *pclient;
+
+        if (pclient != NULL) {
+            //we have a connection
+            handle_connection(pclient);
+        }
+    }
+}
+
 void * handle_connection(void* p_client_socket) {
     int client_socket = *((int*)p_client_socket);
     free(p_client_socket);
