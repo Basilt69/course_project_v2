@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <pthread.h>
+#include "myqueue.h"
 #include <sys/epoll.h>
 #include <signal.h>
 #include <errno.h>
@@ -22,12 +23,18 @@
 
 pthread_t thread_pool[THREAD_POOL_SIZE];
 
+node_t* head = NULL;
+node_t* tail = NULL;
+
 typedef struct sockaddr_in SA_IN;
 typedef struct sockaddr SA;
 
 void* handle_connection(void* p_client_socket);
 int check(int exp, const char *msg);
 void* thread_function(void *arg);
+void enqueue(int *client_socket);
+int* dequeue();
+
 
 int main(int argc, char **argv) {
 
@@ -61,6 +68,8 @@ int main(int argc, char **argv) {
         int *pclient = malloc(sizeof(int));
         *pclient = client_socket;
 
+        enqueue(pclient);
+
     }
 
 
@@ -78,6 +87,8 @@ int check(int exp, const char *msg){
 void * thread_function(void *arg){
     while(true){
         int *pclient;
+
+        pclient = dequeue();
 
         if (pclient != NULL) {
             //we have a connection
@@ -130,4 +141,29 @@ void * handle_connection(void* p_client_socket) {
     fclose(fp);
     printf("closing connection\n");
     return NULL;
+}
+
+void enqueue(int *client_socket){
+    node_t *newnode = malloc(sizeof(node_t));
+    newnode->client_socket = client_socket;
+    newnode->next=NULL;
+    if (tail == NULL){
+        head = newnode;
+    }
+    tail = newnode;
+}
+
+// returns NULL if the queue is empty
+// returns the pointer to a client_socket, if there is one to get
+int* dequeue(){
+    if (head == NULL) {
+        return NULL;
+    } else {
+        int *result = head->client_socket;
+        node_t *temp = head;
+        head = head->next;
+        if (head == NULL) {tail = NULL;}
+        free(temp);
+        return result;
+    }
 }
