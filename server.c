@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <unistd.h> /*importing POSIX Operating System API library*/
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <limits.h>
-#include <pthread.h>
+#include <pthread.h> /*importing  the thread library*/
 #include "myqueue.h"
 #include <sys/epoll.h>
 #include <signal.h>
@@ -20,6 +20,16 @@
 #define SOCKETERROR (-1)
 #define SERVER_BACKLOG 100
 #define THREAD_POOL_SIZE 12
+#define MEMBAR __sync_synchronize() /*memory barrier instruction*/
+
+volatile int num[THREAD_POOL_SIZE]; /*volatile prevents the compiler from applying any optimizations*/
+volatile int selecting[THREAD_POOL_SIZE];
+volatile int res;
+
+void lock_thread(int thread){
+    // Before getting the ticket number  "selecting" variable is set true
+
+}
 
 pthread_t thread_pool[THREAD_POOL_SIZE];
 
