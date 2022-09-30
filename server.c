@@ -38,6 +38,7 @@ void* handle_connection(void* p_client_socket);
 int check(int exp, const char *msg);
 void* thread_function(void *arg);
 void lock_thread(int thread);
+void unlock_thread(int thread);
 void enqueue(int *client_socket);
 int* dequeue();
 
@@ -80,9 +81,11 @@ int main(int argc, char **argv) {
         // put the connection somewhere so that an available thread can find it
         int *pclient = malloc(sizeof(int));
         *pclient = client_socket;
-
+        long thread = (long) argc;
+        lock_thread(thread);
 
         enqueue(pclient);
+        unlock_thread(thread);
 
     }
 
@@ -106,12 +109,15 @@ int check(int exp, const char *msg){
 void * thread_function(void *arg){
     while(true){
         int *pclient;
-
+        long thread = (long) arg;
+        lock_thread(thread);
         pclient = dequeue();
 
         if (pclient != NULL) {
             //we have a connection
             handle_connection(pclient);
+            unlock_thread(thread);
+            return NULL;
         }
     }
 }
@@ -218,4 +224,8 @@ void lock_thread(int thread) {
 }
 
 // EXIT Section
+void unlock_thread(int thread){
+    MEMBAR;
+    num[thread]=0;
+}
 
