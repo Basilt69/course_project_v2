@@ -26,11 +26,6 @@ volatile int num[THREAD_POOL_SIZE]; /*volatile prevents the compiler from applyi
 volatile int selecting[THREAD_POOL_SIZE];
 volatile int res;
 
-void lock_thread(int thread){
-    // Before getting the ticket number  "selecting" variable is set true
-
-}
-
 pthread_t thread_pool[THREAD_POOL_SIZE];
 
 node_t* head = NULL;
@@ -42,6 +37,7 @@ typedef struct sockaddr SA;
 void* handle_connection(void* p_client_socket);
 int check(int exp, const char *msg);
 void* thread_function(void *arg);
+void lock_thread(int thread);
 void enqueue(int *client_socket);
 int* dequeue();
 
@@ -90,7 +86,7 @@ int main(int argc, char **argv) {
 
     }
 
-    for (int i=0; i<THREAD_POOL_SIZE;i++) {
+    for (int i=0; i<THREAD_POOL_SIZE;++i) {
         //Reaping the resources used by all threads once their task is completed
         pthread_join(thread_pool[i],NULL);
     }
@@ -190,3 +186,36 @@ int* dequeue(){
         return result;
     }
 }
+
+void lock_thread(int thread) {
+    //Before getting the ticket number "selecting" variable is set true
+    selecting[thread] = 1;
+    MEMBAR;
+    //Memory barrier applied
+    int max_num = 0;
+    // Finding maximum ticket value among current threads
+    for (int i=0; i<THREAD_POOL_SIZE;++i){
+        int ticket = num[i];
+        max_num = ticket > max_num ? ticket:max_num;
+    }
+    //Alloting new ticket value as maximum +1
+    num[thread] = max_num + 1;
+    MEMBAR;
+    selecting[thread]=0;
+    MEMBAR;
+    //ENTRY Section starts
+    for (int other=0; other<THREAD_POOL_SIZE;++other){
+        //Applying the bakery algorithm conditions
+        while (selecting[other]){
+
+        }
+        MEMBAR;
+        while (num[other] !=0 && (num[other] <num[thread] || (num[other] == num[thread] && other < thread))){
+
+        }
+    }
+
+}
+
+// EXIT Section
+
