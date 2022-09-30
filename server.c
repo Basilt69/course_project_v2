@@ -9,17 +9,14 @@
 #include <limits.h>
 #include <pthread.h> /*importing  the thread library*/
 #include "myqueue.h"
-#include <sys/epoll.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/un.h>
+
 
 
 #define SERVERPORT 8989
 #define BUFSIZE 4096
 #define SOCKETERROR (-1)
 #define SERVER_BACKLOG 100
-#define THREAD_POOL_SIZE 12
+#define THREAD_POOL_SIZE 20
 #define MEMBAR __sync_synchronize() /*memory barrier instruction*/
 
 volatile int num[THREAD_POOL_SIZE]; /*volatile prevents the compiler from applying any optimizations*/
@@ -58,8 +55,9 @@ int main(int argc, char **argv) {
     // create a bunch of threads to handle future connections
     for (int i=0; i < THREAD_POOL_SIZE; i++) {
         //""thread body is the thread routine
-        pthread_create(&thread_pool[i], NULL, thread_function, NULL);
-    }
+        pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));}
+
+
 
     check((server_socket = socket(AF_INET, SOCK_STREAM, 0)), "Failed to create socket.");
 
@@ -84,16 +82,16 @@ int main(int argc, char **argv) {
         long thread = (long) argc;
         lock_thread(thread);
 
+
         enqueue(pclient);
         unlock_thread(thread);
 
     }
 
-    for (int i=0; i<THREAD_POOL_SIZE;++i) {
+    for (int i=0; i<THREAD_POOL_SIZE;i++) {
         //Reaping the resources used by all threads once their task is completed
         pthread_join(thread_pool[i],NULL);
     }
-
 
     return 0;
 }
@@ -111,12 +109,15 @@ void * thread_function(void *arg){
         int *pclient;
         long thread = (long) arg;
         lock_thread(thread);
+
         pclient = dequeue();
 
         if (pclient != NULL) {
             //we have a connection
+            printf("Thread %d entered critical section\n", (int )thread);
             handle_connection(pclient);
             unlock_thread(thread);
+            printf("Thread %d left critical section\n", (int)thread);
             return NULL;
         }
     }
