@@ -51,9 +51,16 @@ int main(int argc, char **argv) {
     int server_socket, addr_size;
     int client_socket;
     SA_IN server_addr, client_addr;
+    memset((void *)num,0,sizeof(num));
+    memset((void *)selecting,0,sizeof(selecting));
+    res=0;
+
+    //Declaring the thread variables
+    pthread_t thread_pool[THREAD_POOL_SIZE];
 
     // create a bunch of threads to handle future connections
     for (int i=0; i < THREAD_POOL_SIZE; i++) {
+        //""thread body is the thread routine
         pthread_create(&thread_pool[i], NULL, thread_function, NULL);
     }
 
@@ -78,8 +85,14 @@ int main(int argc, char **argv) {
         int *pclient = malloc(sizeof(int));
         *pclient = client_socket;
 
+
         enqueue(pclient);
 
+    }
+
+    for (int i=0; i<THREAD_POOL_SIZE;i++) {
+        //Reaping the resources used by all threads once their task is completed
+        pthread_join(thread_pool[i],NULL);
     }
 
 
