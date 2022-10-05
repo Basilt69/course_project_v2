@@ -22,9 +22,10 @@
 #define SERVER_BACKLOG 100
 #define THREAD_POOL_SIZE 20
 #define MEMBAR __sync_synchronize() /*memory barrier instruction*/
+#define MAXTHREADCNT 20
 
 // max number of threads
-const int MAXTHREADCNT=20;
+//const int MAXTHREADCNT=20;
 // real number of threads
 int threadcnt=0;
 
@@ -135,6 +136,10 @@ int main(int argc, char **argv) {
         //lock_thread(thread);
         threadcnt++;
         // creating queque of sockets and counting them
+        printf("This is threadcnt %d in main \n", threadcnt);
+
+        printf("This is plcient in main before enqueue %d\n", pclient);
+
         enqueue(pclient);
         //printf("This is threadcnt %d\n", threadcnt);
 
@@ -143,6 +148,7 @@ int main(int argc, char **argv) {
         // creating of threads to handle connections
         for (int i=0; i < threadcnt; i++) {
             //""thread body is the thread routine
+            printf("We entered thread create %d\n", i);
             pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
             if (&thread_pool[i] == NULL) {
                 printf("Error create thread");
@@ -246,12 +252,14 @@ int check(int exp, const char *msg){
 
 
 void * thread_function(void *arg){
-    while(true){
+    /*while(true){
         int *pclient;
         long thread_id = (long) arg;
 
 
         pclient = dequeue();
+        printf("Pclient in dequeue %d thread_fucntion", pclient);
+        printf("This is thread_id in thread function %d\n", thread_id);
 
         if (pclient != NULL) {
             //we have a connection
@@ -261,9 +269,26 @@ void * thread_function(void *arg){
             unlock_thread(thread_id);
             printf("Thread %d left critical section\n", (int)thread_id);
             return NULL;
-        }
+        }*/
+    int *pclient;
+    long thread_id = (long) arg;
+
+
+    pclient = dequeue();
+    printf("Pclient in dequeue %d thread_fucntion\n", pclient);
+    printf("This is thread_id in thread function %d\n", thread_id);
+
+    if (pclient != NULL) {
+        //we have a connection
+        lock_thread(thread_id);
+        printf("Thread %d entered critical section\n", (int )thread_id);
+        handle_connection(pclient);
+        unlock_thread(thread_id);
+        printf("Thread %d left critical section\n\n\n", (int)thread_id);
+        return NULL;
     }
-}
+    }
+
 
 
 void * handle_connection(void* p_client_socket) {
@@ -343,6 +368,8 @@ int* dequeue(){
 
 void lock_thread(int thread_id) {
     //Before getting the ticket number "selecting" variable is set true
+    printf("We enetered lock fucntion in lock_thread\n");
+
     entering[thread_id] = 1;
     MEMBAR;
     //Memory barrier applied
@@ -369,21 +396,24 @@ void lock_thread(int thread_id) {
             }
             while (ticket[i] != 0 && (ticket[thread_id] > ticket[i] ||
                                       (ticket[thread_id] == ticket[i] && thread_id > i))) {
-
+                sched_yield;
                 printf("This is ticket[i] %d\n, this is ticket[thread_id] %d\n, this is i %d\n", ticket[i],
                        ticket[thread_id], i);
-                sched_yield;
+
             }
         }
 
     }
+    printf("We left lock fucntion in lock_thread\n");
 }
 
 // EXIT Section
 void unlock_thread(int thread_id){
     MEMBAR;
     // Return the taken ticket number
+    printf("We enetered unlock fucntion in unlock_thread\n");
     ticket[thread_id]=0;
+    printf("We left unlock fucntion in unlock_thread\n");
 }
 
 
