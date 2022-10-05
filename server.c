@@ -141,24 +141,48 @@ int main(int argc, char **argv) {
         printf("This is plcient in main before enqueue %d\n", pclient);
 
         enqueue(pclient);
+
+        if (threadcnt == THREAD_POOL_SIZE) {
+            // creating of threads to handle connections
+            for (int i=0; i < threadcnt; i++) {
+                //""thread body is the thread routine
+                printf("We entered thread create %d\n", i);
+                pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
+                if (&thread_pool[i] == NULL) {
+                    printf("Error create thread");
+                    return 1;
+                }
+            }
+            for (int i=0; i<threadcnt;i++) {
+                //Reaping the resources used by all threads once their task is completed
+                pthread_join(thread_pool[i],NULL);
+
+            }
+            threadcnt = 0;
+        } else {
+            // creating of threads to handle connections
+            for (int i=0; i < threadcnt; i++) {
+                //""thread body is the thread routine
+                printf("We entered thread create %d\n", i);
+                pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
+                if (&thread_pool[i] == NULL) {
+                    printf("Error create thread");
+                    return 1;
+                }
+            }
+            for (int i=0; i<threadcnt;i++) {
+                //Reaping the resources used by all threads once their task is completed
+                pthread_join(thread_pool[i],NULL);
+
+            }
+            threadcnt = 0;
+        }
+
         //printf("This is threadcnt %d\n", threadcnt);
 
         //unlock_thread(thread);
 
-        // creating of threads to handle connections
-        for (int i=0; i < threadcnt; i++) {
-            //""thread body is the thread routine
-            printf("We entered thread create %d\n", i);
-            pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
-            if (&thread_pool[i] == NULL) {
-                printf("Error create thread");
-                return 1;
-            }
-        }
-        for (int i=0; i<threadcnt;i++) {
-            //Reaping the resources used by all threads once their task is completed
-            pthread_join(thread_pool[i],NULL);
-        }
+
 
     }
 
