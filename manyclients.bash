@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for N in {1..3}
+for N in {1..21}
 do
   ruby client.rb $((($N % 6) + 1))&
 done
