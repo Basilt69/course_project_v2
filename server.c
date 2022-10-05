@@ -1,29 +1,30 @@
-// a new thread for every conncection
+#include <limits.h>
+#include <pthread.h> /*importing  the thread library*/
+#include <sched.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h> /*importing POSIX Operating System API library*/
+#include <sys/errno.h>
 #include <sys/socket.h>
+#include <sys/signal.h>
 #include <arpa/inet.h>
-#include <stdbool.h>
-#include <limits.h>
-#include <pthread.h> /*importing  the thread library*/
+
+
 #include "myqueue.h"
 
 
 
-#define SERVERPORT 8989
-#define BUFSIZE 4096
-#define SOCKETERROR (-1)
+#define SERVER_PORT 8989
+#define BUF_SIZE 4096
+#define SOCKET_ERROR (-1)
 #define SERVER_BACKLOG 100
 #define THREAD_POOL_SIZE 20
 #define MEMBAR __sync_synchronize() /*memory barrier instruction*/
 
-volatile int num[THREAD_POOL_SIZE]; /*volatile prevents the compiler from applying any optimizations*/
-volatile int selecting[THREAD_POOL_SIZE];
-volatile int res;
-
-pthread_t thread_pool[THREAD_POOL_SIZE];
+int num[THREAD_POOL_SIZE]; /*volatile prevents the compiler from applying any optimizations*/
+int selecting[THREAD_POOL_SIZE];
 
 node_t* head = NULL;
 node_t* tail = NULL;
@@ -33,21 +34,31 @@ typedef struct sockaddr SA;
 
 void* handle_connection(void* p_client_socket);
 int check(int exp, const char *msg);
+
 void* thread_function(void *arg);
+
 void lock_thread(int thread);
 void unlock_thread(int thread);
+
 void enqueue(int *client_socket);
 int* dequeue();
 
 
-int main(int argc, char **argv) {
+void handler(int a, siginfo_t *b, void *c) {}
 
-    int server_socket, addr_size;
-    int client_socket;
-    SA_IN server_addr, client_addr;
-    memset((void *)num,0,sizeof(num));
+int main(int argc, char **argv) {
+    struct sigaction act;
+    memset(&act, 0, sizeof (act));
+
+    act.sa_flags = SA_SIGINFO & ~SA_RESTART;
+    act.sa_sigaction = &handler;
+    if (sigaction(SIGINT, &act, NULL) == -1) {
+        perror("Sigaction failed");
+        return -1;
+    }
+
+    memset((void *)num, 0, sizeof(num));
     memset((void *)selecting,0,sizeof(selecting));
-    res=0;
 
     //Declaring the thread variables
     pthread_t thread_pool[THREAD_POOL_SIZE];
@@ -55,38 +66,64 @@ int main(int argc, char **argv) {
     // create a bunch of threads to handle future connections
     for (int i=0; i < THREAD_POOL_SIZE; i++) {
         //""thread body is the thread routine
-        pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));}
+        pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
+    }
 
-
-
-    check((server_socket = socket(AF_INET, SOCK_STREAM, 0)), "Failed to create socket.");
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == SOCKET_ERROR) {
+        perror("Failed to create socket.");
+        return -1;
+    }
 
     // initialize the address struct
+    SA_IN server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(SERVERPORT);
+    server_addr.sin_port = htons(SERVER_PORT);
 
-    check(bind(server_socket, (SA*)&server_addr, sizeof(server_addr)), "Bind failed!");
-    check(listen(server_socket, SERVER_BACKLOG), "Listen failed!");
+    if (bind(server_socket, (SA*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+        perror("Bind failed");
+        return -1;
+    }
 
-    while(true){
-        printf("Waiting for connections...\n");
-        //wait for and eventually accept an incoming connection
-        addr_size = sizeof(SA_IN);
-        check(client_socket = accept(server_socket, (SA*)&client_addr, (socklen_t*)&addr_size), "accept failed");
+    if (listen(server_socket, SERVER_BACKLOG) == SOCKET_ERROR) {
+        perror("Listen failed");
+        return -1;
+    }
+
+    while (true) {
+        printf("Waiting for connections...\n"); //wait for and eventually accept an incoming connection
+
+
+        SA_IN client_addr;
+        size_t addr_size = sizeof(SA_IN);
+        memset(&client_addr, 0, sizeof (client_addr));
+        int client_socket = accept(server_socket, (SA*)&client_addr, (socklen_t*)&addr_size);
+        if (client_socket == SOCKET_ERROR) {
+            if (errno == EINTR) {
+                printf("\nInterrupting\n");
+                break;
+            }
+            perror("Accept failed");
+            return -1;
+        }
+
         printf("Connected!\n");
 
         // put the connection somewhere so that an available thread can find it
         int *pclient = malloc(sizeof(int));
         *pclient = client_socket;
+
+
         long thread = (long) argc;
+
+
         lock_thread(thread);
-
-
         enqueue(pclient);
         unlock_thread(thread);
-
     }
+
 
     for (int i=0; i<THREAD_POOL_SIZE;i++) {
         //Reaping the resources used by all threads once their task is completed
@@ -97,7 +134,7 @@ int main(int argc, char **argv) {
 }
 
 int check(int exp, const char *msg){
-    if (exp == SOCKETERROR){
+    if (exp == SOCKET_ERROR){
         perror(msg);
         exit(1);
     }
@@ -126,7 +163,7 @@ void * thread_function(void *arg){
 void * handle_connection(void* p_client_socket) {
     int client_socket = *((int*)p_client_socket);
     free(p_client_socket);
-    char buffer[BUFSIZE];
+    char buffer[BUF_SIZE];
     size_t bytes_read;
     int msgsize = 0;
     char actualpath[PATH_MAX+1];
@@ -134,7 +171,7 @@ void * handle_connection(void* p_client_socket) {
     // read the client's message -- the name of the file to read
     while((bytes_read = read(client_socket, buffer+msgsize, sizeof(buffer)-msgsize-1)) > 0) {
         msgsize += bytes_read;
-        if (msgsize > BUFSIZE-1 || buffer[msgsize-1] == '\n') break;
+        if (msgsize > BUF_SIZE-1 || buffer[msgsize-1] == '\n') break;
     }
     check(bytes_read,"recv error");
     buffer[msgsize-1] =0; // null terminate the message and remove the \n
@@ -159,7 +196,7 @@ void * handle_connection(void* p_client_socket) {
     sleep(1);
 
     // read file contents and send them to client
-    while((bytes_read = fread(buffer, 1, BUFSIZE, fp)) > 0){
+    while((bytes_read = fread(buffer, 1, BUF_SIZE, fp)) > 0){
         printf("sending %zu bytes\n",bytes_read);
         write(client_socket, buffer,bytes_read);
     }
