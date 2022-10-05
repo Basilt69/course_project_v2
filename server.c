@@ -97,6 +97,15 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    for(int i=0; i < THREAD_POOL_SIZE; i++)
+    {//""thread body is the thread routin
+        pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
+        if (&thread_pool[i] == NULL) {
+            printf("Error create thread");
+            return 1;
+        }}
+
+
     // Create and listen to the client sockets(+numerate them)
     while (true) {
         printf("Waiting for connections...\n"); //wait for and eventually accept an incoming connection
@@ -124,21 +133,12 @@ int main(int argc, char **argv) {
         threadcnt++;
         enqueue(pclient);
 
-        for(int i=0; i < THREAD_POOL_SIZE; i++)
-        {//""thread body is the thread routin
-            pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
-            if (&thread_pool[i] == NULL) {
-                printf("Error create thread");
-                return 1;
-            }}
-
-        for (int i=0; i<THREAD_POOL_SIZE;i++) {
-            //Reaping the resources used by all threads once their task is completed
-            pthread_join(thread_pool[i],NULL);
-
+        //threadcnt = 0;
         }
-            threadcnt = 0;
-        }
+    for (int i=0; i<THREAD_POOL_SIZE;i++) {
+        //Reaping the resources used by all threads once their task is completed
+        pthread_join(thread_pool[i],NULL);
+    }
     return 0;
 }
 
@@ -154,10 +154,9 @@ int check(int exp, const char *msg){
 
 
 void * thread_function(void *arg) {
-    int *pclient;
-    long thread_id = (long) arg;
-
-    while(pclient != NULL){
+    while(true){
+        int *pclient;
+        long thread_id = (long) arg;
         pclient = dequeue();
 
         if (pclient != NULL) {
