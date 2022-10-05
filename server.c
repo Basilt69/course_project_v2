@@ -249,12 +249,13 @@ void * thread_function(void *arg){
     while(true){
         int *pclient;
         long thread_id = (long) arg;
-        lock_thread(thread_id);
+
 
         pclient = dequeue();
 
         if (pclient != NULL) {
             //we have a connection
+            lock_thread(thread_id);
             printf("Thread %d entered critical section\n", (int )thread_id);
             handle_connection(pclient);
             unlock_thread(thread_id);
