@@ -37,6 +37,7 @@ byte entering[MAXTHREADCNT];
 //Declaring the thread variables
 pthread_t thread_pool[THREAD_POOL_SIZE];
 pthread_mutex_t  mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condition_var = PTHREAD_COND_INITIALIZER;
 
 node_t* head = NULL;
 node_t* tail = NULL;
@@ -134,14 +135,19 @@ int main(int argc, char **argv) {
         threadcnt++;
         pthread_mutex_lock(&mutex);
         enqueue(pclient);
+        pthread_cond_signal(&condition_var);
         pthread_mutex_unlock(&mutex);
 
-        //threadcnt = 0;
+        if (threadcnt == THREAD_POOL_SIZE) {
+            for (int i=0; i<THREAD_POOL_SIZE;i++) {
+                //Reaping the resources used by all threads once their task is completed
+                pthread_join(thread_pool[i],NULL);}
+            threadcnt = 0;
         }
-    for (int i=0; i<THREAD_POOL_SIZE;i++) {
-        //Reaping the resources used by all threads once their task is completed
-        pthread_join(thread_pool[i],NULL);
-    }
+
+
+        }
+
     return 0;
 }
 
@@ -161,6 +167,7 @@ void * thread_function(void *arg) {
         int *pclient;
         long thread_id = (long) arg;
         pthread_mutex_lock(&mutex);
+        pthread_cond_wait(&condition_var, &mutex);
         pclient = dequeue();
         pthread_mutex_unlock(&mutex);
 
