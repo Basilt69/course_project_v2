@@ -133,20 +133,21 @@ int main(int argc, char **argv) {
         *pclient = client_socket;
 
         threadcnt++;
+
+        printf("Threadcnt in main %d\n", threadcnt);
         pthread_mutex_lock(&mutex);
         enqueue(pclient);
         pthread_cond_signal(&condition_var);
         pthread_mutex_unlock(&mutex);
 
-        if (threadcnt == THREAD_POOL_SIZE) {
-            for (int i=0; i<THREAD_POOL_SIZE;i++) {
-                //Reaping the resources used by all threads once their task is completed
-                pthread_join(thread_pool[i],NULL);}
-            threadcnt = 0;
-        }
+
 
 
         }
+    for (int i=0; i<THREAD_POOL_SIZE;i++) {
+            //Reaping the resources used by all threads once their task is completed
+            printf("We are in thread join\n");
+            pthread_join(thread_pool[i],NULL);}
 
     return 0;
 }
@@ -170,6 +171,7 @@ void * thread_function(void *arg) {
         pthread_cond_wait(&condition_var, &mutex);
         pclient = dequeue();
         pthread_mutex_unlock(&mutex);
+        printf("This is thread_id in thread_function %d\n", thread_id);
 
         if (pclient != NULL) {
             //we have a connection
