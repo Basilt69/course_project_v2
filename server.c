@@ -34,6 +34,9 @@ typedef unsigned char byte; // creating of byte type
 byte ticket[MAXTHREADCNT]; /*volatile prevents the compiler from applying any optimizations*/
 byte entering[MAXTHREADCNT];
 
+//thread_function signal handler
+static volatile sig_atomic_t is_interrupted = 0;
+
 //Declaring the thread variables
 pthread_t thread_pool[THREAD_POOL_SIZE];
 pthread_mutex_t  mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -57,7 +60,12 @@ void enqueue(int *client_socket);
 int* dequeue();
 
 
-void handler(int a, siginfo_t *b, void *c) {}
+void handler(int sig, siginfo_t *b, void *c) {
+    printf("\nCaugt signal %d (%s)\n", sig, strsignal(sig));
+
+    if (sig == SIGQUIT)
+        is_interrupted = 1;
+}
 
 int main(int argc, char **argv) {
     pthread_t thread_id; //thread id
@@ -70,8 +78,12 @@ int main(int argc, char **argv) {
     act.sa_sigaction = &handler;
     if (sigaction(SIGINT, &act, NULL) == -1) {
         perror("Sigaction failed");
+        return -1;}
+    if (sigaction(SIGQUIT, &act, NULL) == -1) {
+        perror("Sigaction failed(quit)");
         return -1;
     }
+
     memset((void *)ticket, 0, sizeof(ticket));
     memset((void *)entering,0,sizeof(entering));
 
@@ -139,10 +151,6 @@ int main(int argc, char **argv) {
         enqueue(pclient);
         pthread_cond_signal(&condition_var);
         pthread_mutex_unlock(&mutex);
-
-
-
-
         }
     for (int i=0; i<THREAD_POOL_SIZE;i++) {
             //Reaping the resources used by all threads once their task is completed
@@ -164,7 +172,11 @@ int check(int exp, const char *msg){
 
 
 void * thread_function(void *arg) {
-    while(true){
+    while(!is_interrupted){
+        if (errno == EINTR) {
+            printf("\nInterrupting\n");
+            break;
+        }
         int *pclient;
         long thread_id = (long) arg;
         pthread_mutex_lock(&mutex);
