@@ -36,6 +36,7 @@ byte entering[MAXTHREADCNT];
 
 //Declaring the thread variables
 pthread_t thread_pool[THREAD_POOL_SIZE];
+pthread_mutex_t  mutex = PTHREAD_MUTEX_INITIALIZER;
 
 node_t* head = NULL;
 node_t* tail = NULL;
@@ -131,7 +132,9 @@ int main(int argc, char **argv) {
         *pclient = client_socket;
 
         threadcnt++;
+        pthread_mutex_lock(&mutex);
         enqueue(pclient);
+        pthread_mutex_unlock(&mutex);
 
         //threadcnt = 0;
         }
@@ -157,7 +160,9 @@ void * thread_function(void *arg) {
     while(true){
         int *pclient;
         long thread_id = (long) arg;
+        pthread_mutex_lock(&mutex);
         pclient = dequeue();
+        pthread_mutex_unlock(&mutex);
 
         if (pclient != NULL) {
             //we have a connection
