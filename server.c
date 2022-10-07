@@ -1,45 +1,31 @@
 #include <limits.h>
-#include <pthread.h> /*importing  the thread library*/
+#include <pthread.h>
 #include <sched.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> /*importing POSIX Operating System API library*/
+#include <unistd.h>
 #include <sys/errno.h>
 #include <sys/socket.h>
 #include <sys/signal.h>
 #include <arpa/inet.h>
 
-
 #include "myqueue.h"
-
-
 
 #define SERVER_PORT 8989
 #define BUF_SIZE 4096
 #define SOCKET_ERROR (-1)
 #define SERVER_BACKLOG 100
 #define THREAD_POOL_SIZE 20
-#define MEMBAR __sync_synchronize() /*memory barrier instruction*/
-#define MAXTHREADCNT 20
+#define MEM_BAR __sync_synchronize()
+#define MAX_THREAD_CNT 20UL
 
-// max number of threads
-//const int MAXTHREADCNT=20;
-// real number of threads
-int threadcnt=0;
+unsigned char ticket[MAX_THREAD_CNT];
+unsigned char entering[MAX_THREAD_CNT];
 
-typedef unsigned char byte; // creating of byte type
-
-byte ticket[MAXTHREADCNT]; /*volatile prevents the compiler from applying any optimizations*/
-byte entering[MAXTHREADCNT];
-
-//thread_function signal handler
-static volatile sig_atomic_t is_interrupted = 0;
-
-//Declaring the thread variables
 pthread_t thread_pool[THREAD_POOL_SIZE];
-pthread_mutex_t  mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t condition_var = PTHREAD_COND_INITIALIZER;
 
 node_t* head = NULL;
@@ -49,54 +35,43 @@ typedef struct sockaddr_in SA_IN;
 typedef struct sockaddr SA;
 
 void* handle_connection(void* p_client_socket);
-int check(int exp, const char *msg);
+int check(int exp, const char* msg);
 
-void* thread_function(void *arg);
+void* thread_function(void* arg);
 
-void lock_thread(int thread_id);
-void unlock_thread(int thread_id);
+void lock_thread(size_t thread_id);
+void unlock_thread(size_t thread_id);
+bool is_interrupted = false;
 
-void enqueue(int *client_socket);
+void enqueue(int* client_socket);
 int* dequeue();
 
-
-void handler(int sig, siginfo_t *b, void *c) {
-    printf("\nCaugt signal %d (%s)\n", sig, strsignal(sig));
-
-    if (sig == SIGQUIT)
-        is_interrupted = 1;
-}
+void handler(int sig, siginfo_t* b, void* c) {}
 
 int main(int argc, char **argv) {
-    pthread_t thread_id; //thread id
-
-    // Parameters, threads and signal handler
     struct sigaction act;
     memset(&act, 0, sizeof (act));
 
     act.sa_flags = SA_SIGINFO & ~SA_RESTART;
     act.sa_sigaction = &handler;
-    if (sigaction(SIGINT, &act, NULL) == -1) {
+
+    if (sigaction(SIGINT, &act, NULL) == -1 || sigaction(SIGQUIT, &act, NULL) == -1) {
         perror("Sigaction failed");
-        return -1;}
-    if (sigaction(SIGQUIT, &act, NULL) == -1) {
-        perror("Sigaction failed(quit)");
         return -1;
     }
 
     memset((void *)ticket, 0, sizeof(ticket));
     memset((void *)entering,0,sizeof(entering));
 
-    // Creating server socket to handle client connections(requests)
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == SOCKET_ERROR) {
         perror("Failed to create socket.");
         return -1;
     }
 
-    // initialize the address struct
     SA_IN server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
+
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(SERVER_PORT);
@@ -111,23 +86,21 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    for(int i=0; i < THREAD_POOL_SIZE; i++)
-    {//""thread body is the thread routin
-        pthread_create(&thread_pool[i], NULL, thread_function, (void *)((long)i));
-        if (&thread_pool[i] == NULL) {
-            printf("Error create thread");
+    for (size_t thread_id = 0; thread_id < THREAD_POOL_SIZE; thread_id++) {
+        pthread_create(&thread_pool[thread_id], NULL, thread_function, (void*)(thread_id));
+        if (&thread_pool[thread_id] == NULL) {
+            printf("Error creating thread");
             return 1;
-        }}
+        }
+    }
 
-
-    // Create and listen to the client sockets(+numerate them)
     while (true) {
-        printf("Waiting for connections...\n"); //wait for and eventually accept an incoming connection
-
+        printf("Waiting for connections...\n");
 
         SA_IN client_addr;
         size_t addr_size = sizeof(SA_IN);
         memset(&client_addr, 0, sizeof (client_addr));
+
         int client_socket = accept(server_socket, (SA*)&client_addr, (socklen_t*)&addr_size);
         if (client_socket == SOCKET_ERROR) {
             if (errno == EINTR) {
@@ -138,29 +111,30 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        printf("Connected!\n");
+        printf("Accepted connection!\n");
 
-        // put the connection somewhere so that an available thread can find it
         int *pclient = malloc(sizeof(int));
         *pclient = client_socket;
 
-        threadcnt++;
-
-        printf("Threadcnt in main %d\n", threadcnt);
         pthread_mutex_lock(&mutex);
         enqueue(pclient);
-        pthread_cond_signal(&condition_var);
+        pthread_cond_broadcast(&condition_var);
         pthread_mutex_unlock(&mutex);
-        }
-    for (int i=0; i<THREAD_POOL_SIZE;i++) {
-            //Reaping the resources used by all threads once their task is completed
-            printf("We are in thread join\n");
-            pthread_join(thread_pool[i],NULL);}
+    }
+
+    printf("Finishing main thread\n");
+
+    pthread_mutex_lock(&mutex);
+    is_interrupted = true;
+    pthread_cond_broadcast(&condition_var);
+    pthread_mutex_unlock(&mutex);
+
+    for (int i = 0; i < THREAD_POOL_SIZE; i++) {
+        pthread_join(thread_pool[i],NULL);
+    }
 
     return 0;
 }
-
-
 
 int check(int exp, const char *msg){
     if (exp == SOCKET_ERROR){
@@ -170,39 +144,40 @@ int check(int exp, const char *msg){
     return exp;
 }
 
+void* thread_function(void* arg) {
+    while (true) {
+        size_t thread_id = (size_t)(arg);
 
-void * thread_function(void *arg) {
-    while(!is_interrupted){
-        if (errno == EINTR) {
-            printf("\nInterrupting\n");
-            break;
-        }
-        int *pclient;
-        long thread_id = (long) arg;
+        printf("Starting thread %lu\n", thread_id);
+
         pthread_mutex_lock(&mutex);
         pthread_cond_wait(&condition_var, &mutex);
-        pclient = dequeue();
+
+        if (is_interrupted) {
+            pthread_mutex_unlock(&mutex);
+            printf("Finishing thread %lu\n", thread_id);
+            return NULL;
+        }
+
         pthread_mutex_unlock(&mutex);
-        printf("This is thread_id in thread_function %d\n", thread_id);
+        int* pclient = dequeue();
 
         if (pclient != NULL) {
-            //we have a connection
             lock_thread(thread_id);
-            printf("Thread %d entered critical section\n", (int) thread_id);
+            printf("Thread %lu entered critical section\n", thread_id);
             handle_connection(pclient);
             unlock_thread(thread_id);
-            printf("Thread %d left critical section\n\n\n", (int) thread_id);
-            return NULL;
-}}}
+            printf("Thread %lu left critical section\n\n\n", thread_id);
+        }
+    }
+}
 
-
-
-void * handle_connection(void* p_client_socket) {
+void* handle_connection(void* p_client_socket) {
     int client_socket = *((int*)p_client_socket);
     free(p_client_socket);
     char buffer[BUF_SIZE];
     size_t bytes_read;
-    int msgsize = 0;
+    size_t msgsize = 0;
     char actualpath[PATH_MAX+1];
 
     // read the client's message -- the name of the file to read
@@ -243,8 +218,7 @@ void * handle_connection(void* p_client_socket) {
     return NULL;
 }
 
-void enqueue(int *client_socket){
-
+void enqueue(int* client_socket) {
     node_t *newnode = malloc(sizeof(node_t));
     newnode->client_socket = client_socket;
     newnode->next=NULL;
@@ -254,9 +228,7 @@ void enqueue(int *client_socket){
     tail = newnode;
 }
 
-// returns NULL if the queue is empty
-// returns the pointer to a client_socket, if there is one to get
-int* dequeue(){
+int* dequeue() {
     if (head == NULL) {
         return NULL;
     } else {
@@ -269,18 +241,16 @@ int* dequeue(){
     }
 }
 
-
-
-void lock_thread(int thread_id) {
+void lock_thread(size_t thread_id) {
     //Before getting the ticket number "selecting" variable is set true
-    printf("We enetered lock fucntion %d\n", thread_id);
+    printf("We entered lock function %lu\n", thread_id);
 
     entering[thread_id] = 1;
-    MEMBAR;
+    MEM_BAR;
     //Memory barrier applied
     int max_num = 0;
     // Finding maximum ticket value among current threads
-    for (int i = 0; i < threadcnt; ++i) {
+    for (size_t i = 0; i < MAX_THREAD_CNT; ++i) {
         int current = ticket[i];
         if (current > max_num) {
             max_num = current;
@@ -289,9 +259,9 @@ void lock_thread(int thread_id) {
     ticket[thread_id] = 1 + max_num;
     //Alloting new ticket value as maximum +1
     entering[thread_id] = 0;
-    MEMBAR;
+    MEM_BAR;
     //ENTRY Section starts
-    for (int i = 0; i < threadcnt; i++) {
+    for (size_t i = 0; i < MAX_THREAD_CNT; i++) {
         //Applying the bakery algorithm conditions
         if (i != thread_id) {
             while (entering[i] == 1) {
@@ -299,17 +269,15 @@ void lock_thread(int thread_id) {
             }
             while (ticket[i] != 0 && (ticket[thread_id] > ticket[i] ||
                                       (ticket[thread_id] == ticket[i] && thread_id > i))) {
-                sched_yield;
+                sched_yield();
             }
         }
 
     }
 }
 
-// EXIT Section
-void unlock_thread(int thread_id){
-    MEMBAR;
-    // Return the taken ticket number
-    printf("We unlocked thread %d\n", thread_id);
-    ticket[thread_id]=0;
+void unlock_thread(size_t thread_id){
+    MEM_BAR;
+    printf("We unlocked thread %lu\n", thread_id);
+    ticket[thread_id] = 0;
 }
